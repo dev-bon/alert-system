@@ -1,0 +1,159 @@
+// RadioHead Amplitude Shift Keying Library
+#include <RH_ASK.h>
+// SPI Library
+#include <SPI.h>
+
+const int INPUT_BUTTON_D_PIN = 5;
+const int INPUT_BUTTON_E_PIN = 4;
+const int INPUT_BUTTON_F_PIN = 3;
+const int INPUT_BUTTON_G_PIN = 2;
+
+const int OUTPUT_TRANSMITTER_PIN = 9;
+const int OUTPUT_RECEIVER_PIN = 10;
+const int OUTPUT_LED_BUZZER_PIN = LED_BUILTIN;
+
+const int OUTPUT_LED_A_PIN = 8;
+const int OUTPUT_LED_B_PIN = 7;
+const int OUTPUT_LED_C_PIN = 6;
+
+const boolean _buttonsAreActiveLow = true;
+
+boolean isTransmitterMode = true;
+
+RH_ASK rf_driver;
+
+
+void setup() {
+  pinMode(INPUT_BUTTON_D_PIN, INPUT_PULLUP);
+  pinMode(INPUT_BUTTON_E_PIN, INPUT_PULLUP);
+  pinMode(INPUT_BUTTON_F_PIN, INPUT_PULLUP);
+  pinMode(INPUT_BUTTON_G_PIN, INPUT_PULLUP);
+
+  pinMode(OUTPUT_TRANSMITTER_PIN, OUTPUT);
+  pinMode(OUTPUT_RECEIVER_PIN, OUTPUT);
+  pinMode(OUTPUT_LED_BUZZER_PIN, OUTPUT);
+
+  pinMode(OUTPUT_LED_A_PIN, OUTPUT);
+  pinMode(OUTPUT_LED_B_PIN, OUTPUT);
+  pinMode(OUTPUT_LED_C_PIN, OUTPUT);
+
+  rf_driver.init();
+  Serial.begin(9600);
+}
+
+void loop() {
+  if (isTransmitterMode) {
+    digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+    digitalWrite(OUTPUT_RECEIVER_PIN, LOW);
+
+    if (isButtonPressed(INPUT_BUTTON_D_PIN)) {
+      digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
+      const char *msg = "D";
+      rf_driver.send((uint8_t *)msg, strlen(msg));
+      rf_driver.waitPacketSent();
+    } else if (isButtonPressed(INPUT_BUTTON_E_PIN)) {
+      digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
+      const char *msg = "E";
+      rf_driver.send((uint8_t *)msg, strlen(msg));
+      rf_driver.waitPacketSent();
+      isTransmitterMode = false;
+    } else if (isButtonPressed(INPUT_BUTTON_F_PIN)) {
+      digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
+      const char *msg = "F";
+      rf_driver.send((uint8_t *)msg, strlen(msg));
+      rf_driver.waitPacketSent();
+      isTransmitterMode = false;
+    } else if (isButtonPressed(INPUT_BUTTON_G_PIN)) {
+      digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
+      const char *msg = "G";
+      rf_driver.send((uint8_t *)msg, strlen(msg));
+      rf_driver.waitPacketSent();
+      isTransmitterMode = false;
+    } else {
+      digitalWrite(OUTPUT_TRANSMITTER_PIN, LOW);
+      digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+    }
+  } else {
+    digitalWrite(OUTPUT_RECEIVER_PIN, HIGH);
+    digitalWrite(OUTPUT_LED_A_PIN, LOW);
+    digitalWrite(OUTPUT_LED_B_PIN, LOW);
+    digitalWrite(OUTPUT_LED_C_PIN, LOW);
+    digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+
+    uint8_t buf[24];
+    uint8_t buflen = sizeof(buf);
+    // Check if received packet is correct size
+    if (rf_driver.recv(buf, &buflen)) {
+      // Ensure null termination
+      buf[buflen] = '\0';
+
+      // Message received with valid checksum
+      Serial.print("Message Received: ");
+      Serial.println((char *)buf);
+
+      switch (buf[0]) {
+        case 'A':
+          Serial.println("On our way");
+          notify(OUTPUT_LED_A_PIN, 1000, 3);
+          digitalWrite(OUTPUT_LED_A_PIN, LOW);
+          digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+          isTransmitterMode = true;
+          break;
+        case 'B':
+          Serial.println("Received message");
+          notify(OUTPUT_LED_B_PIN, 1000, 3);
+          digitalWrite(OUTPUT_LED_B_PIN, LOW);
+          digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+          isTransmitterMode = false;
+          break;
+        case 'C':
+          Serial.println("Wait for a moment");
+          notify(OUTPUT_LED_C_PIN, 1000, 3);
+          digitalWrite(OUTPUT_LED_C_PIN, LOW);
+          digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+          isTransmitterMode = false;
+          break;
+        default:
+          break;
+      }
+    }
+  }
+}
+
+boolean isButtonPressed(int btnPin) {
+  // Read the current state of the button
+  int btnVal = digitalRead(btnPin);
+  // Wait a short period of time to allow for debounce
+  delay(40);
+
+  // Read the button state again
+  int btnValAfterDelay = digitalRead(btnPin);
+
+  // Check if the button state is stable
+  if (btnVal == btnValAfterDelay) {
+    // Check if the button is pressed according to active state
+    if (_buttonsAreActiveLow && btnVal == LOW) {
+      // Button is pressed (active low)
+      digitalWrite(OUTPUT_LED_BUZZER_PIN, HIGH);
+      return true;
+    } else if (!_buttonsAreActiveLow && btnVal == HIGH) {
+      // Button is pressed (active high)
+      digitalWrite(OUTPUT_LED_BUZZER_PIN, HIGH);
+      return true;
+    }
+  }
+
+  // Button is not pressed or unstable state
+  return false;
+}
+
+void notify(int OUTPUT_LED_PIN, int duration, int repetitions) {
+  for (int i = 0; i < repetitions; i++) {
+    digitalWrite(OUTPUT_LED_PIN, HIGH);
+    digitalWrite(OUTPUT_LED_BUZZER_PIN, HIGH);
+    delay(duration);
+    digitalWrite(OUTPUT_LED_PIN, LOW);
+    digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+    delay(500);
+  }
+}

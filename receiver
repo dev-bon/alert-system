@@ -1,0 +1,212 @@
+// RadioHead Amplitude Shift Keying Library
+#include <RH_ASK.h>
+// SPI Library
+#include <SPI.h>
+// For I2C
+#include "Wire.h"
+// For LCD
+#include "LCD.h"
+// LCD_I2C Library
+#include "LiquidCrystal_I2C.h"
+
+const int INPUT_BUTTON_A_PIN = 5;
+const int INPUT_BUTTON_B_PIN = 4;
+const int INPUT_BUTTON_C_PIN = 3;
+
+const int OUTPUT_TRANSMITTER_PIN = 9;
+const int OUTPUT_RECEIVER_PIN = 10;
+const int OUTPUT_LED_BUZZER_PIN = LED_BUILTIN;
+
+const int OUTPUT_LED_E_PIN = 8;
+const int OUTPUT_LED_F_PIN = 7;
+const int OUTPUT_LED_G_PIN = 6;
+
+const boolean _buttonsAreActiveLow = true;
+
+boolean isEmergencyPressed = false;
+boolean isReceiverMode = true;
+boolean isReceivedMessage = false;
+
+RH_ASK rf_driver;
+
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7);
+
+void setup() {
+  pinMode(INPUT_BUTTON_A_PIN, INPUT_PULLUP);
+  pinMode(INPUT_BUTTON_B_PIN, INPUT_PULLUP);
+  pinMode(INPUT_BUTTON_C_PIN, INPUT_PULLUP);
+
+  pinMode(OUTPUT_TRANSMITTER_PIN, OUTPUT);
+  pinMode(OUTPUT_RECEIVER_PIN, OUTPUT);
+  pinMode(OUTPUT_LED_BUZZER_PIN, OUTPUT);
+
+  pinMode(OUTPUT_LED_E_PIN, OUTPUT);
+  pinMode(OUTPUT_LED_F_PIN, OUTPUT);
+  pinMode(OUTPUT_LED_G_PIN, OUTPUT);
+
+  rf_driver.init();
+  lcd.begin(20, 4);
+  Serial.begin(9600);
+}
+
+void loop() {
+  if (isReceiverMode) {
+    digitalWrite(OUTPUT_RECEIVER_PIN, HIGH);
+    digitalWrite(OUTPUT_TRANSMITTER_PIN, LOW);
+    digitalWrite(OUTPUT_LED_E_PIN, LOW);
+    digitalWrite(OUTPUT_LED_F_PIN, LOW);
+    digitalWrite(OUTPUT_LED_G_PIN, LOW);
+    digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+
+    // Set buffer to size of expected message
+    uint8_t buf[24];
+    uint8_t buflen = sizeof(buf);
+    // Check if received packet is correct size
+    if (rf_driver.recv(buf, &buflen)) {
+      // Ensure null termination
+      buf[buflen] = '\0';
+
+      // Message received with valid checksum
+      Serial.print("Message Received: ");
+      Serial.println((char *)buf);
+
+      if (!isEmergencyPressed && buf[0] == 'D') {
+        lcd.on();
+        lcd.clear();
+        lcd.setBacklightPin(3, POSITIVE);
+        lcd.setBacklight(HIGH);
+      }
+
+      switch (buf[0]) {
+        case 'D':
+          centerText("EMERGENCY", 1);
+          centerText("ALERT", 2);
+          isEmergencyPressed = true;
+          break;
+        case 'E':
+          if (isEmergencyPressed) {
+            centerText("SERIOUS INJURY", 1);
+            centerText("NEED STRETCHER", 2);
+            notify(OUTPUT_LED_E_PIN, 1000, 3);
+            lcd.off();
+            digitalWrite(OUTPUT_LED_E_PIN, LOW);
+            digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+            isEmergencyPressed = false;
+            isReceiverMode = false;
+          }
+          break;
+        case 'F':
+          if (isEmergencyPressed) {
+            centerText("MODERATE INJURY", 1);
+            centerText("NEED WHEELCHAIR", 2);
+            notify(OUTPUT_LED_F_PIN, 1000, 3);
+            lcd.off();
+            digitalWrite(OUTPUT_LED_F_PIN, LOW);
+            digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+            isEmergencyPressed = false;
+            isReceiverMode = false;
+          }
+          break;
+        case 'G':
+          if (isEmergencyPressed) {
+            centerText("MINOR INJURY", 1);
+            centerText("CAN WALK", 2);
+            notify(OUTPUT_LED_G_PIN, 1000, 3);
+            lcd.off();
+            digitalWrite(OUTPUT_LED_G_PIN, LOW);
+            digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+            isEmergencyPressed = false;
+            isReceiverMode = false;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+  } else {
+    digitalWrite(OUTPUT_RECEIVER_PIN, LOW);
+    if (isButtonPressed(INPUT_BUTTON_A_PIN)) {
+      if (isReceivedMessage) {
+        digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
+        const char *msg = "A";
+        rf_driver.send((uint8_t *)msg, strlen(msg));
+        rf_driver.waitPacketSent();
+        isReceiverMode = true;
+        isReceivedMessage = false;
+        notify(OUTPUT_LED_E_PIN, 1000, 3);
+      }
+    } else if (isButtonPressed(INPUT_BUTTON_B_PIN)) {
+      if (!isReceivedMessage) {
+        digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
+        const char *msg = "B";
+        rf_driver.send((uint8_t *)msg, strlen(msg));
+        rf_driver.waitPacketSent();
+        isReceiverMode = false;
+        isReceivedMessage = true;
+        notify(OUTPUT_LED_F_PIN, 1000, 3);
+      }
+    } else if (isButtonPressed(INPUT_BUTTON_C_PIN)) {
+      if (isReceivedMessage) {
+        digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
+        const char *msg = "C";
+        rf_driver.send((uint8_t *)msg, strlen(msg));
+        rf_driver.waitPacketSent();
+        isReceiverMode = false;
+        isReceivedMessage = true;
+        notify(OUTPUT_LED_G_PIN, 1000, 3);
+      }
+    } else {
+      digitalWrite(OUTPUT_TRANSMITTER_PIN, LOW);
+      digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+    }
+  }
+}
+
+void centerText(String text, int row) {
+  int padding = (20 - text.length()) / 2;  // Calculate padding for centering
+  if (padding < 0) {
+    padding = 0;  // In case the text is longer than the LCD width
+  }
+
+  lcd.setCursor(padding, row);  // Set cursor to the calculated position
+  lcd.print(text);
+}
+
+boolean isButtonPressed(int btnPin) {
+  // Read the current state of the button
+  int btnVal = digitalRead(btnPin);
+
+  // Wait a short period of time to allow for debounce
+  delay(40);
+
+  // Read the button state again
+  int btnValAfterDelay = digitalRead(btnPin);
+
+  // Check if the button state is stable
+  if (btnVal == btnValAfterDelay) {
+    // Check if the button is pressed according to active state
+    if (_buttonsAreActiveLow && btnVal == LOW) {
+      // Button is pressed (active low)
+      digitalWrite(OUTPUT_LED_BUZZER_PIN, HIGH);
+      return true;
+    } else if (!_buttonsAreActiveLow && btnVal == HIGH) {
+      // Button is pressed (active high)
+      digitalWrite(OUTPUT_LED_BUZZER_PIN, HIGH);
+      return true;
+    }
+  }
+
+  // Button is not pressed or unstable state
+  return false;
+}
+
+void notify(int OUTPUT_LED_PIN, int duration, int repetitions) {
+  for (int i = 0; i < repetitions; i++) {
+    digitalWrite(OUTPUT_LED_PIN, HIGH);
+    digitalWrite(OUTPUT_LED_BUZZER_PIN, HIGH);
+    delay(duration);
+    digitalWrite(OUTPUT_LED_PIN, LOW);
+    digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
+    delay(500);
+  }
+}

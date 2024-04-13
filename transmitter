@@ -2,6 +2,12 @@
 #include <RH_ASK.h>
 // SPI Library
 #include <SPI.h>
+// For I2C
+#include "Wire.h"
+// For LCD
+#include "LCD.h"
+// LCD_I2C Library
+#include "LiquidCrystal_I2C.h"
 
 const int INPUT_BUTTON_D_PIN = 5;
 const int INPUT_BUTTON_E_PIN = 4;
@@ -22,6 +28,7 @@ boolean isTransmitterMode = true;
 
 RH_ASK rf_driver;
 
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7);
 
 void setup() {
   pinMode(INPUT_BUTTON_D_PIN, INPUT_PULLUP);
@@ -38,6 +45,7 @@ void setup() {
   pinMode(OUTPUT_LED_C_PIN, OUTPUT);
 
   rf_driver.init();
+  lcd.begin(20, 4);
   Serial.begin(9600);
 }
 
@@ -51,24 +59,28 @@ void loop() {
       const char *msg = "D";
       rf_driver.send((uint8_t *)msg, strlen(msg));
       rf_driver.waitPacketSent();
+      Serial.println("Sent Emergency");
     } else if (isButtonPressed(INPUT_BUTTON_E_PIN)) {
       digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
       const char *msg = "E";
       rf_driver.send((uint8_t *)msg, strlen(msg));
       rf_driver.waitPacketSent();
       isTransmitterMode = false;
+      Serial.println("Sent Serious Injury Need Stretcher");
     } else if (isButtonPressed(INPUT_BUTTON_F_PIN)) {
       digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
       const char *msg = "F";
       rf_driver.send((uint8_t *)msg, strlen(msg));
       rf_driver.waitPacketSent();
       isTransmitterMode = false;
+      Serial.println("Sent Moderate Injury Need Wheelchair");
     } else if (isButtonPressed(INPUT_BUTTON_G_PIN)) {
       digitalWrite(OUTPUT_TRANSMITTER_PIN, HIGH);
       const char *msg = "G";
       rf_driver.send((uint8_t *)msg, strlen(msg));
       rf_driver.waitPacketSent();
       isTransmitterMode = false;
+      Serial.println("Sent Minor Injury Can Walk");
     } else {
       digitalWrite(OUTPUT_TRANSMITTER_PIN, LOW);
       digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
@@ -94,21 +106,42 @@ void loop() {
       switch (buf[0]) {
         case 'A':
           Serial.println("On our way");
+          lcd.on();
+          lcd.clear();
+          lcd.setBacklightPin(3, POSITIVE);
+          lcd.setBacklight(HIGH);
+          centerText("ON OUR", 1);
+          centerText("WAY", 2);
           notify(OUTPUT_LED_A_PIN, 1000, 3);
+          lcd.off();
           digitalWrite(OUTPUT_LED_A_PIN, LOW);
           digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
           isTransmitterMode = true;
           break;
         case 'B':
           Serial.println("Received message");
+          lcd.on();
+          lcd.clear();
+          lcd.setBacklightPin(3, POSITIVE);
+          lcd.setBacklight(HIGH);
+          centerText("RECEIVED", 1);
+          centerText("MESSAGE", 2);
           notify(OUTPUT_LED_B_PIN, 1000, 3);
+          lcd.off();
           digitalWrite(OUTPUT_LED_B_PIN, LOW);
           digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
           isTransmitterMode = false;
           break;
         case 'C':
           Serial.println("Wait for a moment");
+          lcd.on();
+          lcd.clear();
+          lcd.setBacklightPin(3, POSITIVE);
+          lcd.setBacklight(HIGH);
+          centerText("WAIT FOR", 1);
+          centerText("A MOMENT", 2);
           notify(OUTPUT_LED_C_PIN, 1000, 3);
+          lcd.off();
           digitalWrite(OUTPUT_LED_C_PIN, LOW);
           digitalWrite(OUTPUT_LED_BUZZER_PIN, LOW);
           isTransmitterMode = false;
@@ -118,6 +151,16 @@ void loop() {
       }
     }
   }
+}
+
+void centerText(String text, int row) {
+  int padding = (20 - text.length()) / 2;  // Calculate padding for centering
+  if (padding < 0) {
+    padding = 0;  // In case the text is longer than the LCD width
+  }
+
+  lcd.setCursor(padding, row);  // Set cursor to the calculated position
+  lcd.print(text);
 }
 
 boolean isButtonPressed(int btnPin) {
